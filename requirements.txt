@@ -1,10 +1,4 @@
-os
-uuid
-time
-threading
-logging
-pathlib 
 flask  
 yt_dlp  
-mimetypes
+gunicorn
 requests
