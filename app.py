@@ -24,23 +24,45 @@ DOWNLOAD_FOLDER = Path("downloads")
 DOWNLOAD_FOLDER.mkdir(exist_ok=True)
 MAX_FILE_AGE = 3600
 CLEANUP_INTERVAL = 300
-# YouTube cookies file - check Render's secret files location first, then local
-COOKIES_FILE = Path("/etc/secrets/cookies.txt") if Path("/etc/secrets/cookies.txt").exists() else Path("cookies.txt")
+def get_cookies_file():
+    """Get cookies file path - check at runtime for Render secret files"""
+    render_path = Path("/etc/secrets/cookies.txt")
+    local_path = Path("cookies.txt")
+    
+    if render_path.exists():
+        logger.info(f"Using Render secret file: {render_path}")
+        return render_path
+    elif local_path.exists():
+        logger.info(f"Using local cookies file: {local_path}")
+        return local_path
+    else:
+        logger.warning("No cookies.txt found - YouTube may block requests")
+        return None
 
 
 def get_ydl_base_opts():
-    """Get base yt-dlp options with cookie support"""
+    """Get base yt-dlp options with cookie support and bot bypass"""
     opts = {
         'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-us,en;q=0.5',
+            'Sec-Fetch-Mode': 'navigate',
+        },
+        # Additional options to help bypass bot detection
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web'],  # Try Android client first (less restricted)
+            }
+        },
+        'socket_timeout': 30,
     }
+    
     # Use cookies file if it exists
-    if COOKIES_FILE.exists():
-        opts['cookiefile'] = str(COOKIES_FILE)
-        logger.info("Using cookies.txt for YouTube authentication")
-    else:
-        logger.warning("cookies.txt not found - YouTube may block requests")
+    cookies_file = get_cookies_file()
+    if cookies_file:
+        opts['cookiefile'] = str(cookies_file)
+    
     return opts
 
 # Thread-safe storage
