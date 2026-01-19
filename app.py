@@ -24,6 +24,24 @@ DOWNLOAD_FOLDER = Path("downloads")
 DOWNLOAD_FOLDER.mkdir(exist_ok=True)
 MAX_FILE_AGE = 3600
 CLEANUP_INTERVAL = 300
+# YouTube cookies file - check Render's secret files location first, then local
+COOKIES_FILE = Path("/etc/secrets/cookies.txt") if Path("/etc/secrets/cookies.txt").exists() else Path("cookies.txt")
+
+
+def get_ydl_base_opts():
+    """Get base yt-dlp options with cookie support"""
+    opts = {
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+    }
+    # Use cookies file if it exists
+    if COOKIES_FILE.exists():
+        opts['cookiefile'] = str(COOKIES_FILE)
+        logger.info("Using cookies.txt for YouTube authentication")
+    else:
+        logger.warning("cookies.txt not found - YouTube may block requests")
+    return opts
 
 # Thread-safe storage
 progress_lock = threading.Lock()
@@ -103,6 +121,7 @@ def get_video_info(url):
     logger.info(f"Getting info for: {url}")
     
     ydl_opts = {
+        **get_ydl_base_opts(),
         'quiet': False,
         'no_warnings': False,
         'skip_download': True,
@@ -196,6 +215,7 @@ def download_video(url, format_id, mode, job_id, output_format=None):
         temp_file = DOWNLOAD_FOLDER / f"{job_id}.%(ext)s"
         
         ydl_opts = {
+            **get_ydl_base_opts(),
             'outtmpl': str(temp_file),
             'progress_hooks': [create_progress_hook(job_id)],
             'quiet': False,
@@ -305,7 +325,11 @@ def download():
             return jsonify({'error': 'URL required'}), 400
 
         # Extract format info (no download)
-        ydl_opts = {'skip_download': True, 'quiet': True}
+        ydl_opts = {
+            **get_ydl_base_opts(),
+            'skip_download': True,
+            'quiet': True,
+        }
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
 
