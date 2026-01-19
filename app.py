@@ -25,18 +25,34 @@ DOWNLOAD_FOLDER.mkdir(exist_ok=True)
 MAX_FILE_AGE = 3600
 CLEANUP_INTERVAL = 300
 import shutil
+import os
+
+# Set OAuth2 token cache path to a writable location
+OAUTH_TOKEN_PATH = DOWNLOAD_FOLDER / "oauth2_token.json"
+os.environ['YOUTUBE_OAUTH2_TOKEN_PATH'] = str(OAUTH_TOKEN_PATH)
+
+
+def setup_oauth_token():
+    """Copy OAuth token from Render secrets to writable location"""
+    render_token = Path("/etc/secrets/oauth2_token.json")
+    
+    if render_token.exists() and not OAUTH_TOKEN_PATH.exists():
+        try:
+            shutil.copy(render_token, OAUTH_TOKEN_PATH)
+            logger.info(f"Copied OAuth token from {render_token} to {OAUTH_TOKEN_PATH}")
+        except Exception as e:
+            logger.error(f"Failed to copy OAuth token: {e}")
+
 
 def get_cookies_file():
     """Get cookies file path - copy to writable location if needed"""
     render_path = Path("/etc/secrets/cookies.txt")
     local_path = Path("cookies.txt")
-    writable_path = DOWNLOAD_FOLDER / "cookies.txt"  # Writable location
+    writable_path = DOWNLOAD_FOLDER / "cookies.txt"
     
-    # If we already have a writable copy, use it
     if writable_path.exists():
         return writable_path
     
-    # Copy from Render's read-only secret files to writable location
     if render_path.exists():
         try:
             shutil.copy(render_path, writable_path)
@@ -45,17 +61,20 @@ def get_cookies_file():
         except Exception as e:
             logger.error(f"Failed to copy cookies: {e}")
             return None
-    # Use local cookies file
     elif local_path.exists():
         logger.info(f"Using local cookies file: {local_path}")
         return local_path
     else:
-        logger.warning("No cookies.txt found - YouTube may block requests")
+        logger.warning("No cookies.txt found")
         return None
 
 
+# Initialize OAuth token on startup
+setup_oauth_token()
+
+
 def get_ydl_base_opts():
-    """Get base yt-dlp options with cookie support and bot bypass"""
+    """Get base yt-dlp options with OAuth2 and cookie support for bot bypass"""
     opts = {
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
@@ -63,16 +82,21 @@ def get_ydl_base_opts():
             'Accept-Language': 'en-us,en;q=0.5',
             'Sec-Fetch-Mode': 'navigate',
         },
+        # Use OAuth2 plugin for authentication (more reliable than cookies on servers)
+        'username': 'oauth2',
+        'password': '',
         # Additional options to help bypass bot detection
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'web'],  # Try Android client first (less restricted)
+                'player_client': ['android', 'web'],
             }
         },
         'socket_timeout': 30,
+        'quiet': False,
+        'verbose': True,  # Enable verbose logging for debugging
     }
     
-    # Use cookies file if it exists
+    # Also use cookies file if available as fallback
     cookies_file = get_cookies_file()
     if cookies_file:
         opts['cookiefile'] = str(cookies_file)
