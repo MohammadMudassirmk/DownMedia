@@ -24,14 +24,28 @@ DOWNLOAD_FOLDER = Path("downloads")
 DOWNLOAD_FOLDER.mkdir(exist_ok=True)
 MAX_FILE_AGE = 3600
 CLEANUP_INTERVAL = 300
+import shutil
+
 def get_cookies_file():
-    """Get cookies file path - check at runtime for Render secret files"""
+    """Get cookies file path - copy to writable location if needed"""
     render_path = Path("/etc/secrets/cookies.txt")
     local_path = Path("cookies.txt")
+    writable_path = DOWNLOAD_FOLDER / "cookies.txt"  # Writable location
     
+    # If we already have a writable copy, use it
+    if writable_path.exists():
+        return writable_path
+    
+    # Copy from Render's read-only secret files to writable location
     if render_path.exists():
-        logger.info(f"Using Render secret file: {render_path}")
-        return render_path
+        try:
+            shutil.copy(render_path, writable_path)
+            logger.info(f"Copied cookies from {render_path} to {writable_path}")
+            return writable_path
+        except Exception as e:
+            logger.error(f"Failed to copy cookies: {e}")
+            return None
+    # Use local cookies file
     elif local_path.exists():
         logger.info(f"Using local cookies file: {local_path}")
         return local_path
